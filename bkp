@@ -83,6 +83,7 @@ OUTPUTS = {
     "posix": PosixOutput,
 }
 
+# tag::sources[]
 SOURCES = {
     "brew": {
         "install": ["brew", "install"],
@@ -112,6 +113,7 @@ SOURCES = {
         "singleCmd": True
     }
 }
+# end::sources[]
 
 
 def get_packages(sources):
