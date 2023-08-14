@@ -103,7 +103,6 @@ SOURCES = {
     "gem": {
         "install": ["gem", "install"],
         "list": ["gem", "list", "--no-verbose", "--no-versions"],
-        "filter": lambda x: [y for y in x if y.find("asciidoctor") != -1],
         "singleCmd": True
     }
 }
