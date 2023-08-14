@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import subprocess
+import sys
+from abc import ABC, abstractmethod
+
+import yaml
+
+
+class Writer(ABC):
+
+    @abstractmethod
+    def write(self, data):
+        pass
+
+
+class FileWriter(Writer):
+
+    def __init__(self, path):
+        self.f = open(path, "w+")
+
+    def write(self, data):
+        self.f.write(data)
+
+    def __del__(self):
+        self.f.close()
+
+
+class StdoutWriter(Writer):
+
+    def write(self, data):
+        sys.stdout.write(data)
+
+
+class OutputFormat(ABC):
+
+    def __init__(self, pkgs, sources, writer):
+        self.pkgs = pkgs
+        self.sources = sources
+        self.writer = writer
+
+    @abstractmethod
+    def print(self):
+        pass
+
+
+class PosixOutput(OutputFormat):
+
+    def print(self):
+        self.writer.write("#!/bin/sh\n\n")
+        for k, v in self.pkgs.items():
+            pm = self.sources[k]
+            cmd = ' '.join(pm["install"])
+            if pm["singleCmd"]:
+                self.writer.write(cmd + ' \\\n')
+                for p in v:
+                    self.writer.write(2 * ' ' + p)
+                    self.writer.write(' \\\n' if p != v[-1] else '\n')
+            else:
+                for p in v:
+                    self.writer.write("{} {}\n".format(cmd, p))
+
+
+class JsonOutput(OutputFormat):
+
+    def print(self):
+        pkgs = json.dumps(self.pkgs, indent=2)
+        self.writer.write(pkgs)
+
+
+class YamlOutput(OutputFormat):
+
+    def print(self):
+        pkgs = yaml.dump(self.pkgs)
+        self.writer.write(pkgs)
+
+
+OUTPUTS = {
+    "json": JsonOutput,
+    "yaml": YamlOutput,
+    "posix": PosixOutput,
+}
+
+SOURCES = {
+    "brew": {
+        "install": ["brew", "install"],
+        "list": ["brew", "leaves", "--installed-on-request"],
+        "singleCmd": True
+    },
+    "cask": {
+        "install": ["brew", "install", "--cask"],
+        "list": ["brew", "list", "--cask"],
+        "singleCmd": True
+    },
+    "pipx": {
+        "install": ["pipx", "install"],
+        "list": ["pipx", "list", "--short"],
+        "filter": lambda x: [v for i, v in enumerate(x) if i % 2 == 0],
+        "singleCmd": False
+    },
+    "pip": {
+        "install": ["pip", "install", "-u"],
+        "list": ["pip", "list", "--not-required", "--format", "freeze"],
+        "singleCmd": True
+    },
+    "gem": {
+        "install": ["gem", "install"],
+        "list": ["gem", "list", "--no-verbose", "--no-versions"],
+        "filter": lambda x: [y for y in x if y.find("asciidoctor") != -1],
+        "singleCmd": True
+    }
+}
+
+
+def get_packages(sources):
+    output = {}
+    for k, v in sources.items():
+        pkgs = subprocess.run(v["list"], stdout=subprocess.PIPE)
+        pkgs = pkgs.stdout.decode('utf-8').split()
+        if "filter" in v.keys():
+            pkgs = v["filter"](pkgs)
+        output[k] = pkgs
+    return output
+
+
+def get_args():
+    outputs = ', '.join(tuple(OUTPUTS))
+    sources = ', '.join(tuple(SOURCES))
+    parser = argparse.ArgumentParser(prog='bkp')
+    parser.add_argument(
+        '-f',
+        '--format',
+        nargs=1,
+        metavar='',
+        help="Output format: [{}] (default:posix)".format(outputs),
+        default="posix")
+    parser.add_argument('-o',
+                        '--output',
+                        nargs=1,
+                        metavar='',
+                        help="Path where to save the file")
+    parser.add_argument(
+        '-i',
+        '--ignore',
+        nargs='*',
+        metavar='',
+        help="Sources to ignore: [{}] (default:None)".format(sources),
+        default=["pip"])
+    return parser.parse_args()
+
+
+def get_writer(file):
+    writer = StdoutWriter()
+    if file:
+        writer = FileWriter(file)
+    return writer
+
+
+def main():
+    args = get_args()
+    for k in args.ignore:
+        SOURCES.pop(k, None)
+    packages = get_packages(SOURCES)
+    writer = get_writer(args.output)
+    outputFormat = OUTPUTS[args.format](packages, SOURCES, writer)
+    outputFormat.print()
+
+
+if __name__ == "__main__":
+    main()
