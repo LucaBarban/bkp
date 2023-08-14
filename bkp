@@ -110,6 +110,21 @@ SOURCES = {
         "install": ["gem", "install"],
         "list": ["gem", "list", "--no-verbose", "--no-versions"],
         "singleCmd": True
+    },
+    "pacman": {
+        "install": ["pacman", "-Sy", "--noconfirm"],
+        "list": ["pacman", "-Qq"],
+        "singleCmd": True
+    },
+    "yay": {
+            "install": ["yay", "-Sy", "--noconfirm"],
+            "list": ["yay", "-Qq"],
+            "singleCmd": True
+    },
+    "paru": {
+            "install": ["paru", "-Sy", "--noconfirm"],
+            "list": ["paru", "-Qq"],
+            "singleCmd": True
     }
 }
 # end::sources[]
